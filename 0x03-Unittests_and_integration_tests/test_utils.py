@@ -1,129 +1,104 @@
 #!/usr/bin/env python3
-"""Familiarize yourself with the utils.access_nested_map function and
-understand its purpose. Play with it in the Python console to make
-sure you understand.
-
-In this task you will write the first unit test for utils.access_nested_map.
-
-Create a TestAccessNestedMap class that inherits from unittest.TestCase.
-
-Implement the TestAccessNestedMap.test_access_nested_map method to test that
-the method returns what it is supposed to.
-
-Decorate the method with @parameterized.expand to test the function for
-ollowing inputs:
-
-nested_map={"a": 1}, path=("a",)
-nested_map={"a": {"b": 2}}, path=("a",)
-nested_map={"a": {"b": 2}}, path=("a", "b")
+"""
+Unit tests module for utils.access_nested_map.
 """
 
 import unittest
 from parameterized import parameterized
-from utils import access_nested_map, get_json, memoize
+from utils import access_nested_map
 from unittest.mock import patch, Mock
+from utils import get_json, memoize
 
 
 class TestAccessNestedMap(unittest.TestCase):
-    """_summary_
-
-    Args:
-        unittest (_type_): _description_
+    """
+    Class contains unit tests for utils.access_nested_map.
     """
 
-    @parameterized.expand(
-        [
-            ({"a": 1}, ("a",), 1),
-            ({"a": {"b": 2}}, ("a",), {"b": 2}),
-            ({"a": {"b": 2}}, ("a", "b"), 2)
-        ]
-    )
-    def test_access_nested_map(self, nested_map, path, expected_output):
-        """_summary_
+    @parameterized.expand([
+        ({"a": 1}, ("a",), 1),
+        ({"a": {"b": 2}}, ("a",), {"b": 2}),
+        ({"a": {"b": 2}}, ("a", "b"), 2),
+    ])
+    def test_access_nested_map(self, nested_map, path, expected_result):
         """
-        result = access_nested_map(nested_map, path)
-        self.assertEqual(result, expected_output)
+        Ensure access_nested_map returns the expected result.
+        """
+        actual_output = access_nested_map(map, path)
+        self.assertEqual(actual_output, expected_result)
 
-    @parameterized.expand(
-        [
-            ({}, ("a",), KeyError),
-            ({"a": 1}, ("a", "b"), KeyError)
-        ]
-    )
-    def test_access_nested_map_exception(self, nested_map, path,
-                                         expected_output):
-        """_summary_
+    @parameterized.expand([
+       ({}, ("a",), 'a'),
+       ({"a": 1}, ("a", "b"), 'b')
+    ])
+    def test_nested_map_exception(self, map, path, expected_exc):
         """
-        with self.assertRaises(expected_output) as context:
-            access_nested_map(nested_map, path)
+        Ensure access_nested_map raises the expected exception.
+        """
+        with self.assertRaises(KeyError) as e:
+            access_nested_map(map, path)
+        self.assertEqual(expected_exc, str(e.exception))
 
 
 class TestGetJson(unittest.TestCase):
-    """_summary_
-
-    Args:
-                    unittest (_type_): _description_
     """
-    @parameterized.expand(
-        [
-            ('http://example.com', {'payload': True}),
-            ('http://holberton.io', {'payload': False})
-        ]
-    )
-    def test_get_json(self, url, expected_output):
-        """_summary_
-        """
-        mock_response = Mock()
-        mock_response.json.return_value = expected_output
-        with patch('requests.get', return_value=mock_response):
-            response = get_json(url)
+    Class contains unit tests for utils.get_json.
+    """
 
-            self.assertEqual(response, expected_output)
+    @parameterized.expand([
+        ("http://example.com", {"payload": True}),
+        ("http://holberton.io", {"payload": False}),
+    ])
+    @patch('requests.get')
+    def test_get_json(self, test_url, test_payload, mock_get):
+        """
+        Ensure get_json returns the expected result using unittest.mock.patch.
+        """
+        mock_get.return_value = Mock()
+        mock_get.return_value.json.return_value = test_payload
+
+        result = get_json(test_url)
+
+        mock_get.assert_called_once_with(test_url)
+        self.assertEqual(result, test_payload)
 
 
 class TestMemoize(unittest.TestCase):
-    """_summary_
-
-    Args:
-                    unittest (_type_): _description_
+    """
+    Class contains unit tests for utils.memoize decorator.
     """
 
-    def test_memoize(self):
-        """_summary_
-
-        Returns:
-                _type_: _description_
+    class TestClass:
+        """
+        The inner class is used to test memoization with utils.memoize.
         """
 
-        class TestClass:
-            """_summary_
+        def a_method(self):
             """
+            The method returns a constant value (42).
+            """
+            return 42
 
-            def a_method(self):
-                """_summary_
+        @memoize
+        def a_property(self):
+            """
+            The property memoized and calls a_method to get the value.
+            """
+            return self.a_method()
 
-                Returns:
-                        _type_: _description_
-                """
-                return 42
+    @patch('test_utils.TestMemoize.TestClass.a_method', new_callable=Mock)
+    def test_memoize(self, mock_a_method):
+        """
+        Ensure memoization works as expected using unittest.mock.patch.
+        """
+        mock_a_method.return_value = 42
 
-            @memoize
-            def a_property(self):
-                """_summary_
+        instance = self.TestClass()
 
-                Returns:
-                        _type_: _description_
-                """
-                return self.a_method()
+        result_1 = instance.a_property()
+        result_2 = instance.a_property()
 
-        test_obj = TestClass()
+        mock_a_method.assert_called_once()
 
-        with patch.object(test_obj, 'a_method') as mock_method:
-            mock_method.return_value = 42
-
-            result1 = test_obj.a_property
-            result2 = test_obj.a_property
-
-            self.assertEqual(result1, 42)
-            self.assertEqual(result2, 42)
-            mock_method.assert_called_once()
+        self.assertEqual(result_1, 42)
+        self.assertEqual(result_2, 42)
