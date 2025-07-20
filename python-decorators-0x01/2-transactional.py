@@ -1,7 +1,7 @@
 import sqlite3
 import functools
 
-# ─────────────────────────────────────────────
+
 # Decorator to handle DB connection
 def with_db_connection(func):
     """Opens and closes a SQLite database connection for the wrapped function"""
@@ -15,7 +15,7 @@ def with_db_connection(func):
             conn.close()
     return wrapper
 
-# ─────────────────────────────────────────────
+
 # Decorator to handle transactions
 def transactional(func):
     """Wraps a DB operation in a transaction (commit or rollback)"""
@@ -32,7 +32,7 @@ def transactional(func):
             raise
     return wrapper
 
-# ─────────────────────────────────────────────
+
 # Update user email with transaction safety
 @with_db_connection
 @transactional
@@ -41,7 +41,7 @@ def update_user_email(conn, user_id, new_email):
     cursor.execute("UPDATE users SET email = ? WHERE id = ?", (new_email, user_id))
     print(f"Email updated for user_id {user_id}")
 
-# ─────────────────────────────────────────────
+
 # Run the update
 if __name__ == "__main__":
     update_user_email(user_id=1, new_email="Crawford_Cartwright@hotmail.com")
