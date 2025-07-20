@@ -1,24 +1,40 @@
 import sqlite3
 import functools
+import logging
+from datetime import datetime
 
-def with_db_connection(func):
-    """Decorator to manage opening and closing the database connection"""
+# set up a basic logger (writes to console)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+
+# decorator that logs SQL queries 
+def log_queries(func):
+    """
+    Decorator that logs the SQL query (via the `query` argument or the
+    first positional arg) before the wrapped function runs.
+    """
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        conn = sqlite3.connect("users.db")  # Use your DB file name
-        try:
-            result = func(conn, *args, **kwargs)
-            return result
-        finally:
-            conn.close()
+        # Try to get the SQL query from either kwargs or args[0]
+        sql = kwargs.get("query") if "query" in kwargs else args[0] if args else "UNKNOWN"
+        logging.info(f"Executing SQL → {sql}")
+        return func(*args, **kwargs)
     return wrapper
 
-@with_db_connection
-def get_user_by_id(conn, user_id):
+# sample function using the decorator
+@log_queries
+def fetch_all_users(query):
+    conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
-    return cursor.fetchone()
+    cursor.execute(query)
+    results = cursor.fetchall()
+    conn.close()
+    return results
 
-# 🔍 Fetch user with automatic connection handling
-user = get_user_by_id(user_id=1)
-print(user)
+# fetch users while logging the query
+if __name__ == "__main__":
+    users = fetch_all_users(query="SELECT * FROM users")
+    print(users)
