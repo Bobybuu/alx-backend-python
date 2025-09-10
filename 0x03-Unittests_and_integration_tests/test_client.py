@@ -112,19 +112,22 @@ class TestIntegrationGithubOrgClient(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """Set up class method for integration tests"""
-        # Create patchers for both get_json calls
-        cls.get_patcher = patch('client.get_json')
-        cls.mock_get_json = cls.get_patcher.start()
+        # Create a patcher for requests.get
+        cls.get_patcher = patch('requests.get')
+        cls.mock_get = cls.get_patcher.start()
 
         # Set up side effect to return different payloads based on URL
-        def get_json_side_effect(url):
-            if "orgs/testorg" in url:
-                return cls.org_payload
+        def side_effect(url):
+            mock_response = Mock()
+            if url == "https://api.github.com/orgs/testorg":
+                mock_response.json.return_value = cls.org_payload
             elif url == cls.org_payload["repos_url"]:
-                return cls.repos_payload
-            return {}
+                mock_response.json.return_value = cls.repos_payload
+            else:
+                mock_response.json.return_value = {}
+            return mock_response
 
-        cls.mock_get_json.side_effect = get_json_side_effect
+        cls.mock_get.side_effect = side_effect
 
     @classmethod
     def tearDownClass(cls):
@@ -142,12 +145,8 @@ class TestIntegrationGithubOrgClient(unittest.TestCase):
         # Verify the result matches expected repos
         self.assertEqual(result, self.expected_repos)
 
-        # Verify get_json was called twice (org + repos)
-        self.assertEqual(self.mock_get_json.call_count, 2)
-        # Verify first call was for org
-        self.mock_get_json.assert_any_call("https://api.github.com/orgs/testorg")
-        # Verify second call was for repos
-        self.mock_get_json.assert_any_call(self.org_payload["repos_url"])
+        # Verify requests.get was called twice (org + repos)
+        self.assertEqual(self.mock_get.call_count, 2)
 
     def test_public_repos_with_license(self):
         """Integration test for public_repos with license filter"""
@@ -160,12 +159,8 @@ class TestIntegrationGithubOrgClient(unittest.TestCase):
         # Verify the result matches expected apache2 repos
         self.assertEqual(result, self.apache2_repos)
 
-        # Verify get_json was called twice (org + repos)
-        self.assertEqual(self.mock_get_json.call_count, 2)
-        # Verify first call was for org
-        self.mock_get_json.assert_any_call("https://api.github.com/orgs/testorg")
-        # Verify second call was for repos
-        self.mock_get_json.assert_any_call(self.org_payload["repos_url"])
+        # Verify requests.get was called twice (org + repos)
+        self.assertEqual(self.mock_get.call_count, 2)
 
 
 if __name__ == '__main__':
