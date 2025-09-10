@@ -13,8 +13,8 @@ class User(AbstractUser):
         HOST = 'host', 'Host'
         ADMIN = 'admin', 'Admin'
     
-    # Replace the default ID with UUID
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    # Use user_id instead of id to match requirements
+    user_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     
     # Additional fields beyond AbstractUser
     phone_regex = RegexValidator(
@@ -37,6 +37,9 @@ class User(AbstractUser):
     # Override email field to make it unique and required
     email = models.EmailField(unique=True, blank=False, null=False)
     
+    # Add password field explicitly (though AbstractUser already has it)
+    # We'll keep the AbstractUser password field but ensure it's properly handled
+    
     # Remove username field and use email as the username
     username = None
     USERNAME_FIELD = 'email'
@@ -56,7 +59,8 @@ class User(AbstractUser):
 class Conversation(models.Model):
     """Model representing a conversation between users"""
     
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    # Use conversation_id instead of id to match requirements
+    conversation_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     participants = models.ManyToManyField(
         User, 
         related_name='conversations',
@@ -72,7 +76,7 @@ class Conversation(models.Model):
     
     def __str__(self):
         participant_names = [str(user) for user in self.participants.all()[:3]]
-        return f"Conversation {self.id} - Participants: {', '.join(participant_names)}"
+        return f"Conversation {self.conversation_id} - Participants: {', '.join(participant_names)}"
 
 
 class ConversationParticipant(models.Model):
@@ -95,7 +99,8 @@ class ConversationParticipant(models.Model):
 class Message(models.Model):
     """Model representing a message in a conversation"""
     
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    # Use message_id instead of id to match requirements
+    message_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     sender = models.ForeignKey(
         User, 
         on_delete=models.CASCADE, 
