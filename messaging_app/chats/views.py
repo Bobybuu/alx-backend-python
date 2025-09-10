@@ -1,8 +1,5 @@
-from rest_framework import viewsets, status
-from rest_framework.decorators import api_view
+from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework.reverse import reverse
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
@@ -11,7 +8,9 @@ from .serializers import (
     ConversationSerializer, 
     ConversationDetailSerializer,
     MessageSerializer,
-    UserSerializer
+    UserSerializer,
+    MessageCreateSerializer,
+    ConversationCreateSerializer
 )
 
 
@@ -20,11 +19,17 @@ class ConversationViewSet(viewsets.ModelViewSet):
     
     permission_classes = [IsAuthenticated]
     queryset = Conversation.objects.all()
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['participants__email', 'participants__first_name']
+    ordering_fields = ['created_at']
+    ordering = ['-created_at']
     
     def get_serializer_class(self):
         """Return appropriate serializer based on action"""
         if self.action == 'retrieve':
             return ConversationDetailSerializer
+        elif self.action == 'create':
+            return ConversationCreateSerializer
         return ConversationSerializer
     
     def get_queryset(self):
@@ -65,7 +70,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
             )
         
         try:
-            user = User.objects.get(id=user_id)
+            user = User.objects.get(user_id=user_id)
         except User.DoesNotExist:
             return Response(
                 {'error': 'User not found'}, 
@@ -73,7 +78,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
             )
         
         # Check if user is already a participant
-        if conversation.participants.filter(id=user_id).exists():
+        if conversation.participants.filter(user_id=user_id).exists():
             return Response(
                 {'error': 'User is already a participant'}, 
                 status=status.HTTP_400_BAD_REQUEST
@@ -104,7 +109,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
             )
         
         # Check if user is a participant
-        if not conversation.participants.filter(id=user_id).exists():
+        if not conversation.participants.filter(user_id=user_id).exists():
             return Response(
                 {'error': 'User is not a participant'}, 
                 status=status.HTTP_400_BAD_REQUEST
@@ -125,6 +130,16 @@ class MessageViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = MessageSerializer
     queryset = Message.objects.all().select_related('sender', 'conversation')
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['message_body', 'sender__email']
+    ordering_fields = ['sent_at']
+    ordering = ['-sent_at']
+    
+    def get_serializer_class(self):
+        """Return appropriate serializer based on action"""
+        if self.action == 'create':
+            return MessageCreateSerializer
+        return MessageSerializer
     
     def get_queryset(self):
         """Return messages from conversations where user is a participant"""
@@ -140,7 +155,7 @@ class MessageViewSet(viewsets.ModelViewSet):
             # Verify user has access to the conversation
             conversation = get_object_or_404(
                 Conversation, 
-                id=conversation_id, 
+                conversation_id=conversation_id, 
                 participants=self.request.user
             )
         
@@ -159,7 +174,7 @@ class MessageViewSet(viewsets.ModelViewSet):
         # Verify user has access to the conversation
         try:
             conversation = Conversation.objects.get(
-                id=conversation_id, 
+                conversation_id=conversation_id, 
                 participants=request.user
             )
         except Conversation.DoesNotExist:
@@ -177,10 +192,13 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = UserSerializer
     queryset = User.objects.all().order_by('-created_at')
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['email', 'first_name', 'last_name']
+    ordering_fields = ['created_at', 'email']
     
     def get_queryset(self):
         """Return all users except the current user"""
-        return User.objects.exclude(id=self.request.user.id)
+        return User.objects.exclude(user_id=self.request.user.user_id)
     
     @action(detail=False, methods=['get'])
     def me(self, request):
@@ -205,15 +223,3 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
         )
         serializer = ConversationSerializer(conversations, many=True)
         return Response(serializer.data)
-    
-    from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from rest_framework.reverse import reverse
-
-@api_view(['GET'])
-def api_root(request, format=None):
-    return Response({
-        'conversations': reverse('conversation-list', request=request, format=format),
-        'messages': reverse('message-list', request=request, format=format),
-        'users': reverse('user-list', request=request, format=format),
-    })
