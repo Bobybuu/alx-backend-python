@@ -8,10 +8,10 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
-            'id', 'email', 'first_name', 'last_name', 
+            'user_id', 'email', 'first_name', 'last_name', 
             'phone_number', 'role', 'created_at'
         ]
-        read_only_fields = ['id', 'created_at']
+        read_only_fields = ['user_id', 'created_at']
         extra_kwargs = {
             'email': {'required': True},
             'first_name': {'required': True},
@@ -33,10 +33,10 @@ class MessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = Message
         fields = [
-            'id', 'sender', 'sender_id', 'conversation', 
+            'message_id', 'sender', 'sender_id', 'conversation', 
             'message_body', 'sent_at'
         ]
-        read_only_fields = ['id', 'sender', 'sent_at']
+        read_only_fields = ['message_id', 'sender', 'sent_at']
         extra_kwargs = {
             'conversation': {'required': True},
             'message_body': {'required': True},
@@ -81,14 +81,20 @@ class ConversationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Conversation
         fields = [
-            'id', 'participants', 'participant_ids', 
+            'conversation_id', 'participants', 'participant_ids', 
             'messages', 'message_count', 'created_at'
         ]
-        read_only_fields = ['id', 'created_at', 'participants', 'messages', 'message_count']
+        read_only_fields = ['conversation_id', 'created_at', 'participants', 'messages', 'message_count']
     
     def get_message_count(self, obj):
         """Get the count of messages in the conversation"""
         return obj.messages.count()
+    
+    def validate_participant_ids(self, value):
+        """Custom validation for participant IDs"""
+        if len(value) < 2:
+            raise serializers.ValidationError("A conversation must have at least 2 participants.")
+        return value
     
     def create(self, validated_data):
         """Create conversation and add participants"""
@@ -141,3 +147,56 @@ class UserWithConversationsSerializer(UserSerializer):
     def get_conversation_count(self, obj):
         """Get the count of conversations the user is in"""
         return obj.conversations.count()
+
+
+# Additional serializers with CharField and ValidationError usage
+class MessageCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating messages with validation"""
+    
+    message_body = serializers.CharField(
+        max_length=1000,
+        required=True,
+        error_messages={
+            'required': 'Message body is required.',
+            'max_length': 'Message cannot exceed 1000 characters.'
+        }
+    )
+    
+    class Meta:
+        model = Message
+        fields = ['message_body', 'conversation', 'sender']
+        read_only_fields = ['sender']
+    
+    def validate_message_body(self, value):
+        """Custom validation for message body"""
+        if not value.strip():
+            raise serializers.ValidationError("Message body cannot be empty.")
+        return value.strip()
+
+
+class ConversationCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating conversations with validation"""
+    
+    participant_ids = serializers.ListField(
+        child=serializers.CharField(),
+        required=True,
+        error_messages={
+            'required': 'At least one participant ID is required.'
+        }
+    )
+    
+    class Meta:
+        model = Conversation
+        fields = ['participant_ids']
+    
+    def validate_participant_ids(self, value):
+        """Validate participant IDs"""
+        if len(value) < 1:
+            raise serializers.ValidationError("At least one participant is required.")
+        
+        # Check if all participant IDs are valid
+        valid_users = User.objects.filter(user_id__in=value)
+        if len(valid_users) != len(value):
+            raise serializers.ValidationError("One or more participant IDs are invalid.")
+        
+        return value
