@@ -1,6 +1,10 @@
 from django.urls import path, include
 from rest_framework import routers
+
 from .views import ConversationViewSet, MessageViewSet, UserViewSet
+from rest_framework_extensions.routers import NestedDefaultRouter
+
+# Note: NestedDefaultRouter is available for nested routing if needed
 
 # Create a router and register our viewsets
 router = routers.DefaultRouter()
