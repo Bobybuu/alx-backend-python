@@ -12,13 +12,13 @@ from .serializers import (
     MessageCreateSerializer,
     ConversationCreateSerializer
 )
-from .permissions import IsParticipantOfConversation   #  Import custom permission
+from .permissions import IsParticipantOfConversation
 
 
 class ConversationViewSet(viewsets.ModelViewSet):
     """ViewSet for Conversation model with custom actions"""
     
-    permission_classes = [IsAuthenticated, IsParticipantOfConversation]  #  Apply permission
+    permission_classes = [IsAuthenticated, IsParticipantOfConversation]
     queryset = Conversation.objects.all()
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['participants__email', 'participants__first_name']
@@ -26,7 +26,6 @@ class ConversationViewSet(viewsets.ModelViewSet):
     ordering = ['-created_at']
     
     def get_serializer_class(self):
-        """Return appropriate serializer based on action"""
         if self.action == 'retrieve':
             return ConversationDetailSerializer
         elif self.action == 'create':
@@ -34,15 +33,12 @@ class ConversationViewSet(viewsets.ModelViewSet):
         return ConversationSerializer
     
     def get_queryset(self):
-        """Return conversations where current user is a participant"""
         return Conversation.objects.filter(
             participants=self.request.user
         ).prefetch_related('participants', 'messages').order_by('-created_at')
     
     def perform_create(self, serializer):
-        """Create conversation and automatically add current user as participant"""
         conversation = serializer.save()
-        
         # Add current user as participant
         ConversationParticipant = Conversation.participants.through
         ConversationParticipant.objects.create(
@@ -52,7 +48,6 @@ class ConversationViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['get'])
     def messages(self, request, pk=None):
-        """Get all messages for a specific conversation"""
         conversation = self.get_object()
         messages = conversation.messages.all().select_related('sender')
         serializer = MessageSerializer(messages, many=True)
@@ -60,137 +55,104 @@ class ConversationViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['post'])
     def add_participant(self, request, pk=None):
-        """Add a participant to a conversation"""
         conversation = self.get_object()
         user_id = request.data.get('user_id')
         
         if not user_id:
-            return Response(
-                {'error': 'user_id is required'}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': 'user_id is required'}, status=status.HTTP_400_BAD_REQUEST)
         
         try:
             user = User.objects.get(user_id=user_id)
         except User.DoesNotExist:
-            return Response(
-                {'error': 'User not found'}, 
-                status=status.HTTP_404_NOT_FOUND
-            )
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
         
-        # Check if user is already a participant
         if conversation.participants.filter(user_id=user_id).exists():
-            return Response(
-                {'error': 'User is already a participant'}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': 'User already a participant'}, status=status.HTTP_400_BAD_REQUEST)
         
-        # Add user to conversation
         ConversationParticipant = Conversation.participants.through
-        ConversationParticipant.objects.create(
-            conversation=conversation,
-            user=user
-        )
+        ConversationParticipant.objects.create(conversation=conversation, user=user)
         
-        return Response(
-            {'message': 'Participant added successfully'}, 
-            status=status.HTTP_200_OK
-        )
+        return Response({'message': 'Participant added successfully'}, status=status.HTTP_200_OK)
     
     @action(detail=True, methods=['post'])
     def remove_participant(self, request, pk=None):
-        """Remove a participant from a conversation"""
         conversation = self.get_object()
         user_id = request.data.get('user_id')
         
         if not user_id:
-            return Response(
-                {'error': 'user_id is required'}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': 'user_id is required'}, status=status.HTTP_400_BAD_REQUEST)
         
-        # Check if user is a participant
         if not conversation.participants.filter(user_id=user_id).exists():
-            return Response(
-                {'error': 'User is not a participant'}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': 'User not a participant'}, status=status.HTTP_400_BAD_REQUEST)
         
-        # Remove user from conversation
         conversation.participants.remove(user_id)
         
-        return Response(
-            {'message': 'Participant removed successfully'}, 
-            status=status.HTTP_200_OK
-        )
+        return Response({'message': 'Participant removed successfully'}, status=status.HTTP_200_OK)
 
 
 class MessageViewSet(viewsets.ModelViewSet):
-    """ViewSet for Message model"""
+    """ViewSet for Message model - only conversation participants can CRUD"""
     
-    permission_classes = [IsAuthenticated, IsParticipantOfConversation]  #  Apply permission
-    serializer_class = MessageSerializer
-    queryset = Message.objects.all().select_related('sender', 'conversation')
+    permission_classes = [IsAuthenticated, IsParticipantOfConversation]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['message_body', 'sender__email']
     ordering_fields = ['sent_at']
     ordering = ['-sent_at']
-    
+
     def get_serializer_class(self):
-        """Return appropriate serializer based on action"""
         if self.action == 'create':
             return MessageCreateSerializer
         return MessageSerializer
     
     def get_queryset(self):
-        """Return messages from conversations where user is a participant"""
         return Message.objects.filter(
             conversation__participants=self.request.user
         ).select_related('sender', 'conversation').order_by('-sent_at')
     
     def perform_create(self, serializer):
-        """Set the sender to the current user when creating a message"""
         conversation_id = self.request.data.get('conversation')
-        
         if conversation_id:
-            # Verify user has access to the conversation
-            conversation = get_object_or_404(
-                Conversation, 
-                conversation_id=conversation_id, 
+            # Ensure user is part of conversation
+            get_object_or_404(
+                Conversation,
+                conversation_id=conversation_id,
                 participants=self.request.user
             )
-        
         serializer.save(sender=self.request.user)
     
     def create(self, request, *args, **kwargs):
-        """Override create to handle conversation access validation"""
         conversation_id = request.data.get('conversation')
         
         if not conversation_id:
-            return Response(
-                {'error': 'conversation field is required'}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': 'conversation field is required'}, status=status.HTTP_400_BAD_REQUEST)
         
-        # Verify user has access to the conversation
-        try:
-            Conversation.objects.get(
-                conversation_id=conversation_id, 
-                participants=request.user
-            )
-        except Conversation.DoesNotExist:
-            return Response(
-                {'error': 'Conversation not found or access denied'}, 
-                status=status.HTTP_404_NOT_FOUND
-            )
+        if not Conversation.objects.filter(conversation_id=conversation_id, participants=request.user).exists():
+            return Response({'error': 'Conversation not found or access denied'}, status=status.HTTP_404_NOT_FOUND)
         
         return super().create(request, *args, **kwargs)
+
+    def update(self, request, *args, **kwargs):
+        """Allow only the sender to update their own message"""
+        message = self.get_object()
+        if message.sender != request.user:
+            return Response({'error': 'You can only edit your own messages'}, status=status.HTTP_403_FORBIDDEN)
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        return self.update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        """Allow only the sender to delete their own message"""
+        message = self.get_object()
+        if message.sender != request.user:
+            return Response({'error': 'You can only delete your own messages'}, status=status.HTTP_403_FORBIDDEN)
+        return super().destroy(request, *args, **kwargs)
 
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet for User model (read-only)"""
     
-    permission_classes = [IsAuthenticated]  # User access is just authentication
+    permission_classes = [IsAuthenticated]
     serializer_class = UserSerializer
     queryset = User.objects.all().order_by('-created_at')
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
@@ -198,29 +160,19 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
     ordering_fields = ['created_at', 'email']
     
     def get_queryset(self):
-        """Return all users except the current user"""
         return User.objects.exclude(user_id=self.request.user.user_id)
     
     @action(detail=False, methods=['get'])
     def me(self, request):
-        """Get current user information"""
         serializer = self.get_serializer(request.user)
         return Response(serializer.data)
     
     @action(detail=True, methods=['get'])
     def conversations(self, request, pk=None):
-        """Get conversations for a specific user"""
         user = self.get_object()
-        
-        # Only allow users to see their own conversations
         if user != request.user:
-            return Response(
-                {'error': 'Access denied'}, 
-                status=status.HTTP_403_FORBIDDEN
-            )
+            return Response({'error': 'Access denied'}, status=status.HTTP_403_FORBIDDEN)
         
-        conversations = user.conversations.all().prefetch_related(
-            'participants', 'messages'
-        )
+        conversations = user.conversations.all().prefetch_related('participants', 'messages')
         serializer = ConversationSerializer(conversations, many=True)
         return Response(serializer.data)
