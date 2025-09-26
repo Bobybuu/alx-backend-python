@@ -12,12 +12,13 @@ from .serializers import (
     MessageCreateSerializer,
     ConversationCreateSerializer
 )
+from .permissions import IsParticipantOfConversation   #  Import custom permission
 
 
 class ConversationViewSet(viewsets.ModelViewSet):
     """ViewSet for Conversation model with custom actions"""
     
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsParticipantOfConversation]  #  Apply permission
     queryset = Conversation.objects.all()
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['participants__email', 'participants__first_name']
@@ -127,7 +128,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
 class MessageViewSet(viewsets.ModelViewSet):
     """ViewSet for Message model"""
     
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsParticipantOfConversation]  #  Apply permission
     serializer_class = MessageSerializer
     queryset = Message.objects.all().select_related('sender', 'conversation')
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
@@ -173,7 +174,7 @@ class MessageViewSet(viewsets.ModelViewSet):
         
         # Verify user has access to the conversation
         try:
-            conversation = Conversation.objects.get(
+            Conversation.objects.get(
                 conversation_id=conversation_id, 
                 participants=request.user
             )
@@ -189,7 +190,7 @@ class MessageViewSet(viewsets.ModelViewSet):
 class UserViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet for User model (read-only)"""
     
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated]  # User access is just authentication
     serializer_class = UserSerializer
     queryset = User.objects.all().order_by('-created_at')
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
